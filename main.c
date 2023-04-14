@@ -3,6 +3,44 @@
 #define CONVERT(x,y,sizex) (y)*sizex+(x)
 #define COMMAND(cmd) commands[e][cmd]
 
+unsigned int encode(unsigned char *userdata, char *to, unsigned int rsize){
+    FILE *fl2 = fopen(to, "wb");
+    unsigned int qr = rsize*rsize;
+    unsigned char prev[4];
+    unsigned char s = 0;
+    unsigned int fsize = 0;
+    prev[0] = userdata[0];
+    prev[1] = userdata[1];
+    prev[2] = userdata[2];
+    prev[3] = userdata[3];
+    unsigned int f = 1;
+    for(int h = 0; h < qr; ++h){
+        unsigned int is_repeat =
+            prev[0] == userdata[h*4+0] &&
+            prev[1] == userdata[h*4+1] &&
+            prev[2] == userdata[h*4+2] &&
+            prev[3] == userdata[h*4+3];
+        if(!is_repeat || s == 255){
+            if(f){
+                --s;
+                f = 0;
+            }
+            fwrite(&s, sizeof(unsigned char), 1, fl2);
+            fwrite(prev, 4, 1, fl2);
+            fsize += 5;
+            prev[0] = userdata[h*4+0];
+            prev[1] = userdata[h*4+1];
+            prev[2] = userdata[h*4+2];
+            prev[3] = userdata[h*4+3];
+            s = 0;
+        }else{
+            ++s;
+        }
+    }
+    fclose(fl2);
+    return fsize;
+}
+
 int main(int argc, char **argv){
 	if(argc < 2) return 1;
 	int IMAGE_SIZE_INT;
@@ -84,6 +122,7 @@ int main(int argc, char **argv){
 	}
 	printf("count: %d\n", names_c);
 	color *image = (color*)malloc(IMAGE_SIZE_INT*IMAGE_SIZE_INT*sizeof(color));
+	memset(image, '\0', IMAGE_SIZE_INT*IMAGE_SIZE_INT*sizeof(color));
 	markdown mk[names_c];
 	unsigned int best_y = 0;
 	for(int e = 0; e < names_c; ++e){
@@ -110,11 +149,27 @@ int main(int argc, char **argv){
 				int mt2 = j+point.y;
 				if(mt2 > IMAGE_SIZE_INT || mt2 < 0) continue;
 				color nxt = current->data[CONVERT(i,current->ih.height-j-1,current->ih.width)];
+				if(nxt.a == 0){
+					for (int i1 = i-1; i1 < i+2; ++i1){
+						if(i1 < 0 || i1 >= current->ih.width) continue;
+						for (int j1 = j-1; j1 < j+2; ++j1){
+							if(i1==i&&j1==j)continue;
+							if(j1 < 0 || j1 >= current->ih.height) continue;
+							color nnxt = current->data[CONVERT(i1,current->ih.height-j1-1,current->ih.width)];
+							if(nnxt.a){
+								nxt.r = nnxt.r;
+								nxt.g = nnxt.g;
+								nxt.b = nnxt.b;
+								break;
+							}
+						}
+					}
+				}
 				image[CONVERT(i+point.x,(j+point.y),IMAGE_SIZE_INT)] = (color){
 					nxt.b,
 					nxt.g,
 					nxt.r,
-					nxt.a ? 255 : 0
+					nxt.a
 				};
 			}
 		}
@@ -138,10 +193,10 @@ int main(int argc, char **argv){
 	fclose(mk_file);
 	puts("markdown generated to markdown.txt");
 	printf("count: %d\n", names_c);
-	//printf("image: %d|%d|%d|%d\n", image[0].r, image[0].g, image[0].b, image[0].a);
-	FILE *write_to = fopen("/home/oleg/Desktop/gametex.utx", "wb");
-	fwrite(image, IMAGE_SIZE_INT*IMAGE_SIZE_INT*sizeof(color), 1, write_to);
-	fclose(write_to);
+	encode((unsigned char *)image, "/home/oleg/Desktop/gametex.ugg", IMAGE_SIZE_INT);
+	//FILE *write_to = fopen("/home/oleg/Desktop/gametex.utx", "wb");
+	//fwrite(image, IMAGE_SIZE_INT*IMAGE_SIZE_INT*sizeof(color), 1, write_to);
+	//fclose(write_to);
 	free(image);
 	return 0;
 }
